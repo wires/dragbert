@@ -19,11 +19,23 @@
         console.log('reset', $state)
     }
 
-    let freshId = () => uuidv4().slice(0, 16);
+    //let freshId = () => uuidv4().slice(0, 16);
+    let freshId = (() => {
+        var c = 1;
+        return () => `#${c++}`;
+    })();
+
     let freshLabel = (() => {
         var c = 1;
         return () => `pt${c++}`;
     })();
+
+    //let ghostColor = (pointId) => "#" + pointId.slice(2, 8);
+    // lol
+    let colors = []
+    for(var i = 0; i<100; i++){ colors.push(uuidv4().slice(2,6)) }
+
+    let ghostColor = (pointId) => "#" + colors[parseInt(pointId.slice(1)) % colors.length]
 
     function addPoint(pointLabel) {
         let pointId = freshId();
@@ -174,7 +186,6 @@
         }
     };
 
-    let ghostColor = (pointId) => "#" + pointId.slice(2, 8);
 
     // radius
     let r = 7;
