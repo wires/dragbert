@@ -2,6 +2,7 @@
     import Mode from "./Mode.svelte";
     import { writable } from "svelte/store";
     import { v4 as uuidv4 } from "uuid";
+    import Peer from "./Peer.svelte"
 
     let empty = {
         // append only
@@ -10,13 +11,13 @@
         leafs: {},
         // raw log
         logEntries: [],
-    }
-    let state = writable({...empty});
-    function reset () {
-        $state.points = {}
-        $state.leafs = {}
-        $state.logEntries = []
-        console.log('reset', $state)
+    };
+    let state = writable({ ...empty });
+    function reset() {
+        $state.points = {};
+        $state.leafs = {};
+        $state.logEntries = [];
+        console.log("reset", $state);
     }
 
     //let freshId = () => uuidv4().slice(0, 16);
@@ -32,12 +33,15 @@
 
     //let ghostColor = (pointId) => "#" + pointId.slice(2, 8);
     // lol
-    let colors = []
-    for(var i = 0; i<100; i++){ colors.push(uuidv4().slice(2,8)) }
+    let colors = [];
+    for (var i = 0; i < 100; i++) {
+        colors.push(uuidv4().slice(2, 8));
+    }
 
-    let ghostColor = (pointId, entangled) => !entangled
-        ? "#" + colors[parseInt(pointId.slice(1)) % colors.length]
-        : "#" + colors[parseInt(pointId.slice(1)) % colors.length] + '80'
+    let ghostColor = (pointId, entangled) =>
+        !entangled
+            ? "#" + colors[parseInt(pointId.slice(1)) % colors.length]
+            : "#" + colors[parseInt(pointId.slice(1)) % colors.length] + "80";
 
     function addPoint(pointLabel) {
         let pointId = freshId();
@@ -126,17 +130,17 @@
     }
 
     function mergePoint(ghost, shadow) {
-        let oldState = $state
-        let pointId = ghost.pointId
-        let pointLabel = oldState.points[pointId].pointLabel
-        let previousId = ghost.ghostId
-        let ghostId = freshId()
+        let oldState = $state;
+        let pointId = ghost.pointId;
+        let pointLabel = oldState.points[pointId].pointLabel;
+        let previousId = ghost.ghostId;
+        let ghostId = freshId();
         let data = {
             x: shadow.x,
             y: shadow.y,
             owner: shadow.sessionUser,
         };
-        let merged = shadow.colliding.map(c => c.ghostId)
+        let merged = shadow.colliding.map((c) => c.ghostId);
         let newGhost = {
             pointId,
             pointLabel,
@@ -176,8 +180,8 @@
     }
 
     function isEntangled(pointId) {
-        let leafs = Object.values($state.leafs[pointId]).filter(l => l)
-        return leafs.length > 1
+        let leafs = Object.values($state.leafs[pointId]).filter((l) => l);
+        return leafs.length > 1;
     }
 
     let drag = false;
@@ -208,9 +212,8 @@
         if (drag) {
             // merge point
             if (shadow.colliding.length > 0) {
-                mergePoint(drag, shadow)
-            }
-            else {
+                mergePoint(drag, shadow);
+            } else {
                 updatePoint(drag, shadow);
             }
             drag = false;
@@ -219,11 +222,12 @@
     };
     let mouseMove = (evt) => {
         if (drag) {
-            let x = evt.clientX
-            let y = evt.clientY
-            let colliding = collisionDetect(drag, {x,y})
+            let x = evt.clientX;
+            let y = evt.clientY;
+            let colliding = collisionDetect(drag, { x, y });
             shadow = {
-                x, y,
+                x,
+                y,
                 colliding,
                 ghostOwner: drag.data.owner,
                 sessionUser: "JH",
@@ -235,35 +239,35 @@
     let r = 7;
 
     // check if point is near/colling other
-    function distance({x,y}, pt2) {
-        let dx = x - pt2.x
-        let dy = y - pt2.y
-        return Math.sqrt(dx * dx + dy * dy)
+    function distance({ x, y }, pt2) {
+        let dx = x - pt2.x;
+        let dy = y - pt2.y;
+        return Math.sqrt(dx * dx + dy * dy);
     }
     let actualLeafs = (pointId, except = false) => {
-        let leafs = $state.leafs[pointId]
+        let leafs = $state.leafs[pointId];
         let al = Object.values($state.points[pointId].ghosts)
             // .map(g => ({isLeaf: leafs[g.ghostId], ...g}))
-            .filter(g => leafs[g.ghostId])//g.isLeaf) // only active leafs
-            .filter(g => g.ghostId != except) // except this one
-        return al
-    }
+            .filter((g) => leafs[g.ghostId]) //g.isLeaf) // only active leafs
+            .filter((g) => g.ghostId != except); // except this one
+        return al;
+    };
 
     function collisionDetect(ghost, currentPos) {
         // if we check all ghosts, we can merge different logical points
         // if we check only ghosts for one logical point, we disallow this
-        let pt1 = currentPos || ghost.data
-        let pointId = ghost.pointId
-        let otherActualGhosts = actualLeafs(pointId, ghost.ghostId)
-        var colliding = []
+        let pt1 = currentPos || ghost.data;
+        let pointId = ghost.pointId;
+        let otherActualGhosts = actualLeafs(pointId, ghost.ghostId);
+        var colliding = [];
         // check `over` in plaats van deze slome loop
-        for(var g of otherActualGhosts) {
-            let d = distance(pt1, g.data)
-            if(d < 20){
-                colliding.push(g)
+        for (var g of otherActualGhosts) {
+            let d = distance(pt1, g.data);
+            if (d < 20) {
+                colliding.push(g);
             }
         }
-        return colliding
+        return colliding;
     }
 
     let showHistory = true;
@@ -302,15 +306,26 @@
                         <!-- TODO create "cssStateName" fn, active/historic/deleted -->
                         {#if showHistory || (!showHistory && isLeafSetMember(ghost))}
                             <circle
-                                class="pt {isLeafSetMember(ghost) ? 'active' : 'historic'}"
+                                class="pt {isLeafSetMember(ghost)
+                                    ? 'active'
+                                    : 'historic'}"
                                 cx={ghost.data.x}
                                 cy={ghost.data.y}
                                 style={`
-                                    fill: ${ghostColor(ghost.pointId, isEntangled(point.pointId))};
-                                    ${isEntangled(point.pointId) ? 'stroke-dasharray: 2;' : ''};
-                                    stroke-width: ${isEntangled(point.pointId) ? '1' : '3'}
+                                    fill: ${ghostColor(
+                                        ghost.pointId,
+                                        isEntangled(point.pointId)
+                                    )};
+                                    ${
+                                        isEntangled(point.pointId)
+                                            ? "stroke-dasharray: 2;"
+                                            : ""
+                                    };
+                                    stroke-width: ${
+                                        isEntangled(point.pointId) ? "1" : "3"
+                                    }
                                 `}
-                                r={r}
+                                {r}
                                 on:mouseenter={mouseOver(ghost)}
                                 on:mousedown={mouseDown(ghost)}
                             />
@@ -328,13 +343,19 @@
 
             {#if shadow}
                 <circle
-                    class="drag-shadow {shadow.colliding.length > 0 ? 'collision' : ''}"
+                    class="drag-shadow {shadow.colliding.length > 0
+                        ? 'collision'
+                        : ''}"
                     cx={shadow.x}
                     cy={shadow.y}
                     r={10}
                 />
                 {#if shadow.colliding.length}
-                    <text x={shadow.x + 10} y={shadow.y -20}>Merge with {shadow.colliding.map(g => g.ghostId).join(", ")}</text>
+                    <text x={shadow.x + 10} y={shadow.y - 20}
+                        >Merge with {shadow.colliding
+                            .map((g) => g.ghostId)
+                            .join(", ")}</text
+                    >
                 {/if}
             {/if}
         </svg>
@@ -342,6 +363,9 @@
         <div class="show-history">
             <input type="button" value="reset" on:click={reset} />
             <input type="checkbox" bind:checked={showHistory} />show history
+        </div>
+        <div class="peer">
+            <Peer/>
         </div>
 
         <div class="point-ids">
@@ -428,12 +452,12 @@ state = {JSON.stringify($state,null,2)}
         stroke-dasharray: 2;
         stroke-width: 1;
         fill: none;
-        stroke:rgba(0, 0, 0, 0.9)
+        stroke: rgba(0, 0, 0, 0.9);
     }
     .drag-shadow.collision {
-        fill: red!important;
+        fill: red !important;
     }
-    
+
     .lower {
         display: flex;
     }
