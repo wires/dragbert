@@ -125,6 +125,51 @@
         return ghostId;
     }
 
+    function mergePoint(ghost, shadow) {
+        let oldState = $state
+        let pointId = ghost.pointId
+        let pointLabel = oldState.points[pointId].pointLabel
+        let previousId = ghost.ghostId
+        let ghostId = freshId()
+        let data = {
+            x: shadow.x,
+            y: shadow.y,
+            owner: shadow.sessionUser,
+        };
+        let merged = shadow.colliding.map(c => c.ghostId)
+        let newGhost = {
+            pointId,
+            pointLabel,
+            ghostId,
+            previousId,
+            merged,
+            data,
+        };
+
+        // add new ghost to state
+        oldState.points[pointId].ghosts[ghostId] = newGhost;
+
+        // remove old ghost from leafset, add new ghost
+        oldState.leafs[pointId][previousId] = false;
+        for (var mergedGhostId of merged) {
+            oldState.leafs[pointId][mergedGhostId] = false;
+        }
+        oldState.leafs[pointId][ghostId] = true;
+
+        // store in event log
+        oldState.logEntries.push({
+            op: "MG",
+            pointId,
+            pointLabel,
+            ghostId,
+            previousId,
+            merged,
+            data,
+        });
+
+        $state = oldState;
+    }
+
     function isLeafSetMember(ghost) {
         let isMember = $state.leafs[ghost.pointId][ghost.ghostId];
         return isMember;
@@ -134,17 +179,6 @@
         let leafs = Object.values($state.leafs[pointId]).filter(l => l)
         return leafs.length > 1
     }
-
-    // let ptId1 = addPoint(freshLabel());
-    // let gId1 = addGhost(ptId1, { x: 22, y: 23, owner: "B" });
-
-    // let ptId2 = addPoint(freshLabel());
-    // let gId2 = addGhost(ptId2, { x: 82, y: 33, owner: "B" });
-    // // let gId3 = addGhost(ptId2, { x: 50, y: 13, owner: 'J' });
-
-    // let ptId3 = addPoint(freshLabel());
-    // let gId4 = addGhost(ptId3, { x: 122, y: 33, owner: "B" });
-    // // let gId5 = addGhost(ptId3, { x: 150, y: 13, owner: 'J' });
 
     let drag = false;
     let shadow = false;
@@ -171,15 +205,16 @@
         }
     };
     let mouseUp = () => {
-        console.log("mouse up");
         if (drag) {
-            // drag.data.x = shadow.x;
-            // drag.data.y = shadow.y;
-            updatePoint(drag, shadow);
-            // console.log('DRAG UPDATE', drag)
+            // merge point
+            if (shadow.colliding.length > 0) {
+                mergePoint(drag, shadow)
+            }
+            else {
+                updatePoint(drag, shadow);
+            }
             drag = false;
             shadow = false;
-            // return true;
         }
     };
     let mouseMove = (evt) => {
@@ -207,12 +242,10 @@
     }
     let actualLeafs = (pointId, except = false) => {
         let leafs = $state.leafs[pointId]
-        console.log('LEAFS', leafs)
         let al = Object.values($state.points[pointId].ghosts)
             // .map(g => ({isLeaf: leafs[g.ghostId], ...g}))
             .filter(g => leafs[g.ghostId])//g.isLeaf) // only active leafs
             .filter(g => g.ghostId != except) // except this one
-        console.log('AL', al)
         return al
     }
 
@@ -223,21 +256,14 @@
         let pointId = ghost.pointId
         let otherActualGhosts = actualLeafs(pointId, ghost.ghostId)
         var colliding = []
+        // check `over` in plaats van deze slome loop
         for(var g of otherActualGhosts) {
             let d = distance(pt1, g.data)
-            console.log(`DISTANCE ${ghost.ghostId}·--·${g.ghostId}`, {d,g,ghost})
             if(d < 20){
                 colliding.push(g)
             }
         }
         return colliding
-    }
-
-    let isColliding = () => {
-        if (shadow && shadow.colliding) {
-            return shadow.colliding.length > 0
-        }
-        return false
     }
 
     let showHistory = true;
@@ -351,21 +377,23 @@ P {point.pointId}
 {:else}
 <table>
     <thead>
-        <th>OP</th>
-        <th>Point Id</th>
         <th>Label</th>
-        <th>Copy Id</th>
-        <th>Previous Id</th>
+        <th>OP</th>
+        <th>Point</th>
+        <th>Ghost</th>
+        <th>Previous</th>
+        <th>Merged</th>
         <th>Data</th>
     </thead>
 {#each $state.logEntries as logEntry}
 <tbody>
 <tr>
+    <td>{logEntry.pointLabel}</td>
     <td>{logEntry.op}</td>
     <td>{logEntry.pointId}</td>
-    <td>{logEntry.pointLabel}</td>
     <td>{logEntry.ghostId}</td>
     <td>{logEntry.previousId || ''}</td>
+    <td>{logEntry.merged || ''}</td>
     <td>{JSON.stringify(logEntry.data)}</td>
 </tr>
 </tbody>
