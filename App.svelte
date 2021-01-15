@@ -1,4 +1,5 @@
 <script>
+    import Mode from "./Mode.svelte"
     import { writable } from "svelte/store";
     import { v4 as uuidv4 } from "uuid";
 
@@ -10,6 +11,8 @@
         points: {},
         // "state" (all the leafs)
         leafs: {},
+        // raw log
+        logEntries: []
     });
 
     let freshId = () => uuidv4().slice(0, 16);
@@ -56,16 +59,17 @@
         let previousId = ghost.ghostId;
         // create new point (remember, append only)
         let ghostId = freshId();
+        let data = {
+            x: shadow.x,
+            y: shadow.y,
+            owner: shadow.sessionUser,
+        }
         let newGhost = {
             pointId,
             pointLabel,
             ghostId,
             previousId,
-            data: {
-                x: shadow.x,
-                y: shadow.y,
-                owner: shadow.sessionUser,
-            },
+            data
         };
 
         // add new ghost to state
@@ -75,7 +79,19 @@
         oldState.leafs[pointId][previousId] = false
         oldState.leafs[pointId][ghostId] = true
 
+        oldState.logEntries.push({op:'UP',pointId,pointLabel,ghostId,previousId,data})
+        
         $state = oldState;
+    }
+
+    function createPoint (data) {
+        let pointLabel = freshLabel()
+        let pointId = addPoint(pointLabel);
+        let ghostId = addGhost(pointId, data)
+        let oldState = $state
+        oldState.logEntries.push({op:'CR',pointId,pointLabel,ghostId,data})
+        $state = oldState
+        return ghostId
     }
 
     function isLeafSetMember(ghost) {
@@ -111,12 +127,11 @@
     let mouseDownSvg = (evt) => {
         // not over circle
         if (!over) {
-            let pointId = addPoint(freshLabel());
-            let ghostId = addGhost(pointId, {
-                x: evt.clientX,
-                y: evt.clientY,
-                owner: "JH", // session user
-            });
+            createPoint({
+            x: evt.clientX,
+            y: evt.clientY,
+            owner: "JH", // session user
+        })
         }
     };
     let mouseUp = () => {
@@ -142,10 +157,14 @@
         }
     };
 
+    let ghostColor = pointId => '#' + pointId.slice(2, 8)
+
     // radius
     let r = 7;
 
     let showHistory = true
+    let logMode = "raw"
+    let showState = "hide"
 </script>
 
 <div class="lower">
@@ -184,7 +203,7 @@
                     class="pt {isLeafSetMember(ghost) ? 'active' : 'historic'}"
                     cx={ghost.data.x}
                     cy={ghost.data.y}
-                    style={`fill: #${ghost.pointId.slice(0, 6)}`}
+                    style={`fill: ${ghostColor(ghost.pointId)}`}
                     {r}
                     on:mouseenter={mouseOver(ghost)}
                     on:mousedown={mouseDown(ghost)}
@@ -205,26 +224,31 @@
     {/if}
 </svg>
 
-<input type="checkbox" bind:checked={showHistory}>show history
+<div class="show-history">
+    <input type="checkbox" bind:checked={showHistory}>show history
+</div>
 
-<div>
+<div class="point-ids">
     {#each Object.values($state.points) as pt}
-        <span class="point">{pt.pointId}</span>
+        <span style="background-color: {ghostColor(pt.pointId)}" class="point">{pt.pointId}</span>
     {/each}
 </div>
 
 <pre>
-showHistory = {showHistory}
+showHistory={showHistory} logMode={logMode} showState={showState}
 over = {JSON.stringify(over,null,2)}{#if over}<br>isLeafSetMember = {isLeafSetMember(over)}{/if}
-shadow = {JSON.stringify(shadow)}
+shadow = {JSON.stringify(shadow,null,2)}
 drag = {JSON.stringify(drag,null,2)}
 </pre>
 
 </div>
 
 <div>
+<Mode bind:selected={logMode} modes={"pretty raw".split(" ")}/>
 append only log
+
 <pre>
+    {#if (logMode=="pretty")}
 {#each Object.values($state.points) as point}
 P {point.pointId}
 {#each Object.values(point.ghosts) as ghost}
@@ -232,6 +256,30 @@ P {point.pointId}
 {/each}
 <br/>
 {/each}
+{:else}
+<table>
+    <thead>
+        <th>OP</th>
+        <th>Point Id</th>
+        <th>Label</th>
+        <th>Copy Id</th>
+        <th>Previous Id</th>
+        <th>Data</th>
+    </thead>
+{#each $state.logEntries as logEntry}
+<tbody>
+<tr>
+    <td>{logEntry.op}</td>
+    <td>{logEntry.pointId}</td>
+    <td>{logEntry.pointLabel}</td>
+    <td>{logEntry.ghostId}</td>
+    <td>{logEntry.previousId || ''}</td>
+    <td>{JSON.stringify(logEntry.data)}</td>
+</tr>
+</tbody>
+{/each}
+</table>
+{/if}
 </pre>
 <hr>
 folded state
@@ -246,9 +294,12 @@ folded state
 </pre>
 </div>
 <div style="border-left: 1px solid #ccc">
+<Mode bind:selected={showState} modes={"show hide".split(" ")}/> state
+{#if showState == "show"}
 <pre>
 state = {JSON.stringify($state,null,2)}
 </pre>
+{/if}
 </div>
 </div>
 
@@ -275,8 +326,8 @@ state = {JSON.stringify($state,null,2)}
         font-size: 10px;
     }
     .point {
-        background: navajowhite;
-        border: 1px solid royalblue;
+        /* background: navajowhite;
+        border: 1px solid royalblue; */
         margin: 4px;
     }
     pre {
@@ -288,4 +339,30 @@ state = {JSON.stringify($state,null,2)}
         border-top: 1px solid gray;
         height: 0px;
     }
+    .show-history {
+        background-color: rgba(0, 0, 0, 0.24);
+        padding: 4px;
+    }
+    .point-ids {
+        background-color: rgba(0, 0, 0, 0.12);
+        padding: 4px;
+    }
+
+    table {
+    border: solid 1px #DDEEEE;
+    border-collapse: collapse;
+    border-spacing: 0;
+}
+table thead th {
+    background-color: #DDEFEF;
+    border: solid 1px #DDEEEE;
+    color: #336B6B;
+    padding: 4px;
+    text-align: left;
+}
+table tbody td {
+    border: solid 1px #DDEEEE;
+    color: #333;
+    padding: 4px;
+}
 </style>
