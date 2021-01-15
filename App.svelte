@@ -33,9 +33,11 @@
     //let ghostColor = (pointId) => "#" + pointId.slice(2, 8);
     // lol
     let colors = []
-    for(var i = 0; i<100; i++){ colors.push(uuidv4().slice(2,6)) }
+    for(var i = 0; i<100; i++){ colors.push(uuidv4().slice(2,8)) }
 
-    let ghostColor = (pointId) => "#" + colors[parseInt(pointId.slice(1)) % colors.length]
+    let ghostColor = (pointId, entangled) => !entangled
+        ? "#" + colors[parseInt(pointId.slice(1)) % colors.length]
+        : "#" + colors[parseInt(pointId.slice(1)) % colors.length] + '80'
 
     function addPoint(pointLabel) {
         let pointId = freshId();
@@ -128,6 +130,11 @@
         return isMember;
     }
 
+    function isEntangled(pointId) {
+        let leafs = Object.values($state.leafs[pointId]).filter(l => l)
+        return leafs.length > 1
+    }
+
     // let ptId1 = addPoint(freshLabel());
     // let gId1 = addGhost(ptId1, { x: 22, y: 23, owner: "B" });
 
@@ -177,18 +184,61 @@
     };
     let mouseMove = (evt) => {
         if (drag) {
+            let x = evt.clientX
+            let y = evt.clientY
+            let colliding = collisionDetect(drag, {x,y})
             shadow = {
-                x: evt.clientX,
-                y: evt.clientY,
+                x, y,
+                colliding,
                 ghostOwner: drag.data.owner,
                 sessionUser: "JH",
             };
         }
     };
 
-
     // radius
     let r = 7;
+
+    // check if point is near/colling other
+    function distance({x,y}, pt2) {
+        let dx = x - pt2.x
+        let dy = y - pt2.y
+        return Math.sqrt(dx * dx + dy * dy)
+    }
+    let actualLeafs = (pointId, except = false) => {
+        let leafs = $state.leafs[pointId]
+        console.log('LEAFS', leafs)
+        let al = Object.values($state.points[pointId].ghosts)
+            // .map(g => ({isLeaf: leafs[g.ghostId], ...g}))
+            .filter(g => leafs[g.ghostId])//g.isLeaf) // only active leafs
+            .filter(g => g.ghostId != except) // except this one
+        console.log('AL', al)
+        return al
+    }
+
+    function collisionDetect(ghost, currentPos) {
+        // if we check all ghosts, we can merge different logical points
+        // if we check only ghosts for one logical point, we disallow this
+        let pt1 = currentPos || ghost.data
+        let pointId = ghost.pointId
+        let otherActualGhosts = actualLeafs(pointId, ghost.ghostId)
+        var colliding = []
+        for(var g of otherActualGhosts) {
+            let d = distance(pt1, g.data)
+            console.log(`DISTANCE ${ghost.ghostId}·--·${g.ghostId}`, {d,g,ghost})
+            if(d < 20){
+                colliding.push(g)
+            }
+        }
+        return colliding
+    }
+
+    let isColliding = () => {
+        if (shadow && shadow.colliding) {
+            return shadow.colliding.length > 0
+        }
+        return false
+    }
 
     let showHistory = true;
     let logMode = "raw";
@@ -226,13 +276,15 @@
                         <!-- TODO create "cssStateName" fn, active/historic/deleted -->
                         {#if showHistory || (!showHistory && isLeafSetMember(ghost))}
                             <circle
-                                class="pt {isLeafSetMember(ghost)
-                                    ? 'active'
-                                    : 'historic'}"
+                                class="pt {isLeafSetMember(ghost) ? 'active' : 'historic'}"
                                 cx={ghost.data.x}
                                 cy={ghost.data.y}
-                                style={`fill: ${ghostColor(ghost.pointId)}`}
-                                {r}
+                                style={`
+                                    fill: ${ghostColor(ghost.pointId, isEntangled(point.pointId))};
+                                    ${isEntangled(point.pointId) ? 'stroke-dasharray: 2;' : ''};
+                                    stroke-width: ${isEntangled(point.pointId) ? '1' : '3'}
+                                `}
+                                r={r}
                                 on:mouseenter={mouseOver(ghost)}
                                 on:mousedown={mouseDown(ghost)}
                             />
@@ -250,11 +302,14 @@
 
             {#if shadow}
                 <circle
-                    class="drag-shadow"
+                    class="drag-shadow {shadow.colliding.length > 0 ? 'collision' : ''}"
                     cx={shadow.x}
                     cy={shadow.y}
                     r={10}
                 />
+                {#if shadow.colliding.length}
+                    <text x={shadow.x + 10} y={shadow.y -20}>Merge with {shadow.colliding.map(g => g.ghostId).join(", ")}</text>
+                {/if}
             {/if}
         </svg>
 
@@ -322,7 +377,7 @@ P {point.pointId}
         folded state
         <pre>
 {#each Object.keys($state.leafs) as leafPt}
-{leafPt} Point
+{leafPt} Point {isEntangled(leafPt) ? '(entangled)' : ''} clr={ghostColor(leafPt, isEntangled(leafPt))}
 {#each Object.keys($state.leafs[leafPt]).filter(k => $state.leafs[leafPt][k]) as activeGhost}
   * {activeGhost}<br/>
 {/each}
@@ -341,6 +396,16 @@ state = {JSON.stringify($state,null,2)}
 </div>
 
 <style>
+    .drag-shadow {
+        stroke-dasharray: 2;
+        stroke-width: 1;
+        fill: none;
+        stroke:rgba(0, 0, 0, 0.9)
+    }
+    .drag-shadow.collision {
+        fill: red!important;
+    }
+    
     .lower {
         display: flex;
     }
@@ -351,9 +416,7 @@ state = {JSON.stringify($state,null,2)}
         border: 1px solid gray;
         width: 100%;
         height: 300px;
-    }
-    .pt {
-        stroke-width: 3;
+        user-select: none;
     }
     .historic {
         stroke: rgba(0, 0, 0, 0.24);
