@@ -3,17 +3,21 @@
     import { writable } from "svelte/store";
     import { v4 as uuidv4 } from "uuid";
 
-    // lp logical point (state.points)
-    // ap actual point (point.ghosts)
-
-    let state = writable({
+    let empty = {
         // append only
         points: {},
         // "state" (all the leafs)
         leafs: {},
         // raw log
         logEntries: [],
-    });
+    }
+    let state = writable({...empty});
+    function reset () {
+        $state.points = {}
+        $state.leafs = {}
+        $state.logEntries = []
+        console.log('reset', $state)
+    }
 
     let freshId = () => uuidv4().slice(0, 16);
     let freshLabel = (() => {
@@ -177,7 +181,7 @@
 
     let showHistory = true;
     let logMode = "raw";
-    let showState = "hide";
+    let showState = "show";
 </script>
 
 <div class="lower">
@@ -244,6 +248,7 @@
         </svg>
 
         <div class="show-history">
+            <input type="button" value="reset" on:click={reset} />
             <input type="checkbox" bind:checked={showHistory} />show history
         </div>
 
